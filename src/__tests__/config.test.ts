@@ -24,6 +24,13 @@ describe("Configuration Tests", () => {
 
 			expect(config.port).toBe(3000);
 		});
+
+		it("should return 10 book levels and 50 trades by default", async () => {
+			const { config } = await import("../config.js");
+
+			expect(config.bookDepth).toBe(10);
+			expect(config.tradeLimit).toBe(50);
+		});
 	});
 
 	describe("Environment Variable Configuration", () => {
