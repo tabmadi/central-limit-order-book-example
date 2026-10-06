@@ -1,5 +1,5 @@
 {
-	"name": "ts-template",
+	"name": "central-limit-order-book-example",
 	"type": "module",
 	"private": true,
 	"scripts": {

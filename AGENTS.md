@@ -4,13 +4,16 @@ Tool-agnostic guide for any coding agent (Codex, Cursor, Claude Code, or another
 
 ## The one rule that outranks this file
 
-**Humans are the first developers. [README.md](README.md) outranks this file.** It is the human-facing description of what this template provides and how to use it. This file holds only agent-specific operational hints: how to navigate, build, and run the repo.
+**Humans are the first developers. [README.md](README.md) outranks this file.** It is the human-facing explanation of the order book and how to run it. This file holds only agent-specific operational hints: how to navigate, build, and run the repo.
 
 ## What this repo is
 
-A TypeScript application template on the Bun runtime, with Biome for lint and format and a strict ESNext `tsconfig`. The sample code is a demonstration seam, not a feature set.
+A teaching example: a single-symbol, in-memory central limit order book with price-time priority matching, exposed over a small HTTP API. It was generated from the Bun TypeScript template, with Biome for lint and format and a strict ESNext `tsconfig`.
 
-- **Everything here is inherited wholesale** by every project generated from it. A dependency added here is a dependency every generated project carries, so add one only when the template itself needs it.
+- **Readability is the feature.** The code exists to be read by someone learning how a CLOB works. Prefer the clear data structure over the fast one, keep the explanatory comments accurate when the code changes, and keep the README's worked examples and `curl` walkthrough in sync with behaviour.
+- **No new dependencies without a teaching reason.** `Bun.serve` is the HTTP layer; there is no framework, database, or auth on purpose. The README's "What is deliberately missing" list is the backlog of exercises, not a to-do list.
+- The engine (`src/orderbook/`) is pure: no I/O, no clock, no randomness. Input validation lives in `validation.ts` and the HTTP adapter in `src/server.ts`; trading logic stays out of both.
+- Prices and quantities are positive integers (ticks and lots). Never introduce floating-point prices.
 - Application code lives under `src/`; tests sit beside it in `src/__tests__/`.
 - `src/config.ts` is the pattern for configuration: a `convict` schema with defaults and environment variable bindings, validated once at startup. Extend it rather than reading `process.env` from scattered call sites.
 - **This repo pins tools with `proto` ([.prototools](.prototools)), not `mise`** — it is the one template in the set that does. Do not migrate it as a side effect of another change.
