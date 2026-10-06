@@ -1,3 +1,4 @@
+import process from "node:process";
 import type { Server } from "bun";
 import type { OrderBook } from "./orderbook/order-book.ts";
 import { parseOrderRequest } from "./orderbook/validation.ts";
