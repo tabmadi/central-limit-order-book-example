@@ -87,12 +87,13 @@ fills, sweeping levels, priority, market orders, and cancels.
 
 ## Running it
 
-You need [Bun](https://bun.sh/). The repo pins its tools with [proto](https://moonrepo.dev/proto);
-`proto use` installs the exact versions.
+You need [mise](https://mise.jdx.dev). It installs Bun and every other tool at the versions
+pinned in [`.mise.toml`](.mise.toml).
 
 ```bash
-bun install
-bun run dev     # http://localhost:3000, reloads on change
+mise trust && mise install   # the pinned tools
+mise run setup               # dependencies and git hooks
+mise run dev                 # http://localhost:3000, reloads on change
 ```
 
 ### Try it with curl
@@ -150,18 +151,20 @@ Real exchanges add much more. Each of these is a good exercise:
 
 ## Development
 
-| Script           | Description                                        |
-|------------------|----------------------------------------------------|
-| `bun run dev`    | Start the server with file watching                |
-| `bun run start`  | Start the server                                   |
-| `bun test`       | Run the tests                                      |
-| `bun run lint`   | Biome (warnings fail) and `tsc --noEmit`           |
-| `bun run format` | Apply Biome's fixes                                |
+| Task              | Description                                          |
+|-------------------|------------------------------------------------------|
+| `mise run dev`    | Start the server with file watching                  |
+| `mise run start`  | Start the server                                     |
+| `mise run test`   | Run the tests                                        |
+| `mise run lint`   | Biome (warnings fail), `tsc --noEmit`, and gitleaks  |
+| `mise run format` | Apply Biome's fixes                                  |
+| `mise run check`  | Lint and test: run it before you finish a change     |
 
-Git hooks ([Lefthook](https://github.com/evilmartians/lefthook)) lint on commit and enforce
-[Conventional Commits](https://www.conventionalcommits.org/) with
-[Cocogitto](https://github.com/cocogitto/cocogitto). `./scripts/install.sh` installs proto,
-the pinned tools, and the hooks.
+`mise tasks` lists every task; the `package.json` scripts delegate to them. Git hooks
+([Lefthook](https://github.com/evilmartians/lefthook)) fix, type-check, test, and scan staged
+files for secrets on commit, enforce [Conventional Commits](https://www.conventionalcommits.org/)
+with [Cocogitto](https://github.com/cocogitto/cocogitto), and run `mise run ci` on push, the
+same gate as the GitHub workflow.
 
 ## License
 
