@@ -1,232 +1,168 @@
-# 🚀 TypeScript Template
+# Central Limit Order Book (CLOB) by example
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.2-orange.svg)](https://bun.sh/)
-[![Biome](https://img.shields.io/badge/Biome-1.9-green.svg)](https://biomejs.dev/)
 
-A modern, production-ready template for TypeScript projects with all the essential tools and configurations you need to
-get started quickly! 🎯
+A deliberately small, fully tested order book and matching engine in TypeScript. It is the
+same idea that runs every stock and crypto exchange, stripped down to a few hundred
+heavily commented lines you can read in one sitting and poke at with `curl`.
 
-## ✨ Features
+## What is a central limit order book?
 
-This template comes pre-configured with:
+A market has buyers and sellers who disagree on price. An order book is the list of
+everyone who is **waiting** to trade, sorted so the best offers are on top:
 
-- 🔥 **Bun Runtime**: Ultra-fast JavaScript runtime and package manager
-- 📘 **TypeScript**: Type-safe JavaScript with modern ES features
-- 🧹 **Biome**: Fast linter and formatter (Prettier + ESLint replacement)
-- 🔧 **Modern Configuration**: ESNext target with strict type checking
-- 🚨 **Git Integration**: Pre-configured with Biome VCS integration
-- 🪝 **Git Hooks**: Lefthook for automated quality checks
-- 📋 **Conventional Commits**: Cocogitto (cog) for commit message validation and changelog generation
-- 📝 **GitHub Templates**: CODE_OF_CONDUCT.md, SECURITY.md, and LICENSE included
-- ⚡ **Proto Tool Manager**: Automated tool management with [moonrepo proto](https://moonrepo.dev/proto)
+```text
+            ASKS (sellers)                    lowest ask = best price to buy at
+      price   quantity  orders
+       103       4         1
+       102       7         2
+       101       5         1   <-- best ask
+     ------------------------  spread = 101 - 99 = 2
+        99       3         1   <-- best bid
+        98      10         3
+            BIDS (buyers)                     highest bid = best price to sell at
+```
 
-## 🚀 Quick Start
+- A **bid** is an offer to buy; an **ask** is an offer to sell.
+- The **spread** is the gap between the best ask and the best bid. While it is positive,
+  nobody agrees on a price and nothing trades.
+- A **limit order** says "buy (or sell) up to this quantity, at this price or better".
+  Whatever cannot trade right now **rests** on the book and waits.
+- A **market order** says "trade this quantity now, at whatever price is available".
+  It never rests: whatever cannot fill is discarded.
 
-### Prerequisites
+"Central" means one shared book that every participant trades against. "Limit" means the
+book is built out of limit orders.
 
-- [proto](https://moonrepo.dev/proto): A multi-language version manager that will manage all required tools
-- Alternatively, you can install tools separately:
-    - [Bun](https://bun.sh/): Ultra-fast JavaScript runtime and package manager
-    - [Biome](https://biomejs.dev/): Fast linter and formatter (Prettier + ESLint replacement)
-    - [Cocogitto](https://github.com/cocogitto/cocogitto): Conventional commits tooling
-    - [Lefthook](https://github.com/evilmartians/lefthook): Fast and powerful Git hooks manager
+### Matching: price-time priority
 
-### Installation
+When a new order arrives, the engine checks whether it **crosses** the other side: a buy
+at 102 crosses any ask priced 102 or lower. While it crosses, the engine trades against
+the opposite side in a strict order:
 
-1. **Use this template** by clicking the "Use this template" button on GitHub
-2. **Clone your new repository**:
-   ```bash
-   git clone https://github.com/yourusername/your-project-name.git
-   cd your-project-name
-   ```
-3. **Install tools and dependencies**:
-   
-   **Option A: Automated Setup (Recommended)**
-   ```bash
-   # Run the automated installation script
-   ./scripts/install.sh
-   
-   # Install project dependencies
-   bun install
-   ```
-   
-   **Option B: Manual Setup**
-   ```bash
-   # Install proto (if not already installed)
-   bash -c "$(curl -fsSL https://moonrepo.dev/install/proto.sh)"
-   
-   # Install all required tools (bun, biome, cog, lefthook) using proto
-   proto use
-   
-   # Install Git hooks with Lefthook
-   lefthook install
-   
-   # Install project dependencies
-   bun install
-   ```
+1. **Price priority**: best price first (lowest ask for a buyer, highest bid for a seller).
+2. **Time priority**: at the same price, whoever arrived first is filled first.
 
-### 🏃‍♂️ Running the Project
+Each trade happens at the price of the order that was **already resting** (the *maker*),
+not the incoming one (the *taker*). A buyer willing to pay 102 who meets an ask at 101
+pays 101.
+
+### A worked example
+
+Starting from the book above, someone submits **buy 8 @ 102 (limit)**:
+
+| Step | Best ask         | Trade      | Buyer still wants |
+|------|------------------|------------|-------------------|
+| 1    | 101 × 5          | 5 @ 101    | 3                 |
+| 2    | 102 × 7          | 3 @ 102    | 0 → **filled**    |
+
+Within the 102 level, the oldest order fills first. The 101 level is gone and the 102
+level shrinks to 4. Had the order been **buy 20 @ 102**, it would have taken all 12 at 101
+and 102, stopped at 103 (above its limit), and the remaining 8 would **rest** as the new
+best bid at 102. As a **market** order for 20, it would also have taken the 4 at 103 and
+then discarded the last 4.
+
+### Why integers?
+
+Prices are in **ticks** (e.g. cents) and quantities in **lots**, both whole numbers. In
+floating point `0.1 + 0.2 !== 0.3`, and an exchange cannot afford rounding drift.
+
+## Reading the code
+
+Read in this order; each file builds on the previous one.
+
+| File                                                       | What it teaches                                                       |
+|------------------------------------------------------------|-----------------------------------------------------------------------|
+| [`src/orderbook/types.ts`](src/orderbook/types.ts)             | The vocabulary: sides, order types, trades, results                   |
+| [`src/orderbook/price-level.ts`](src/orderbook/price-level.ts) | A FIFO queue at one price: **time priority**                          |
+| [`src/orderbook/book-side.ts`](src/orderbook/book-side.ts)     | Levels sorted best-first: **price priority**                          |
+| [`src/orderbook/order-book.ts`](src/orderbook/order-book.ts)   | **The matching engine**: `submit`, `match`, `cancel`, `snapshot`      |
+| [`src/orderbook/validation.ts`](src/orderbook/validation.ts)   | Checking untrusted input at the edge, so the engine can trust its own |
+| [`src/server.ts`](src/server.ts)                               | A thin HTTP adapter with no trading logic                             |
+
+The tests in [`src/__tests__/`](src/__tests__) double as executable examples:
+[`order-book.test.ts`](src/__tests__/order-book.test.ts) walks through resting, partial
+fills, sweeping levels, priority, market orders, and cancels.
+
+## Running it
+
+You need [Bun](https://bun.sh/). The repo pins its tools with [proto](https://moonrepo.dev/proto);
+`proto use` installs the exact versions.
 
 ```bash
-# Start the development server (with watch mode)
-bun run dev
-
-# Start the production server
-bun run start
+bun install
+bun run dev     # http://localhost:3000, reloads on change
 ```
 
-## 🛠️ Development
-
-### Available Scripts
-
-| Script            | Description                                 |
-|-------------------|---------------------------------------------|
-| `bun run start`   | Start the production server                 |
-| `bun run dev`     | Start development server with file watching |
-| `bun run lint`    | Run Biome linter                            |
-| `bun run format`  | Format code with Biome                      |
-| `bun run prepare` | Install Lefthook Git hooks                  |
-
-### 🧹 Code Quality
-
-This template uses **Biome** for both linting and formatting:
+### Try it with curl
 
 ```bash
-# Check for linting issues
-bun run lint
+# Build an ask side
+curl -s -XPOST localhost:3000/orders -d '{"type":"limit","side":"sell","price":101,"quantity":5}'
+curl -s -XPOST localhost:3000/orders -d '{"type":"limit","side":"sell","price":102,"quantity":7}'
 
-# Auto-fix linting issues and format code
-bun run format
+# And a bid
+curl -s -XPOST localhost:3000/orders -d '{"type":"limit","side":"buy","price":99,"quantity":3}'
+
+# Look at the book: spread is 2
+curl -s localhost:3000/book
+
+# Cross the spread: fills 5 @ 101 and 3 @ 102
+curl -s -XPOST localhost:3000/orders -d '{"type":"limit","side":"buy","price":102,"quantity":8}'
+
+# A market sell hits the best bid
+curl -s -XPOST localhost:3000/orders -d '{"type":"market","side":"sell","quantity":1}'
+
+# What traded, and cancel the rest of order 3 (the bid at 99)
+curl -s localhost:3000/trades
+curl -s -XDELETE localhost:3000/orders/3
 ```
 
-### 🪝 Git Hooks & Conventional Commits
+### HTTP API
 
-This template includes **Lefthook** for automated Git hooks
+| Method   | Path                | Body / query                                    | Response                                                                    |
+|----------|---------------------|-------------------------------------------------|-----------------------------------------------------------------------------|
+| `POST`   | `/orders`           | `{ type, side, price?, quantity }`              | `201` with status, filled / resting / cancelled quantities and trades; `400` with a reason |
+| `DELETE` | `/orders/:id`       |                                                 | `200` with the cancelled order; `404` if it is not resting                  |
+| `GET`    | `/book`             | `?depth=N` (default `BOOK_DEPTH`, 10)           | `{ bids, asks, spread }`, best levels first                                 |
+| `GET`    | `/trades`           | `?limit=N` (default `TRADE_LIMIT`, 50)          | The most recent trades, oldest first                                        |
+| `GET`    | `/health`           |                                                 | Liveness check                                                              |
 
-#### Automatic Quality Checks
+`type` is `"limit"` or `"market"`, `side` is `"buy"` or `"sell"`, `price` (limit orders
+only) and `quantity` are positive integers. Configuration lives in
+[`src/config.ts`](src/config.ts); see [`.env.example`](.env.example).
 
-Git hooks will automatically run on:
+## What is deliberately missing
 
-- **Pre-commit**: Format code, run linter, and type-check
-- **Commit-msg**: Validate commit message format
-- **Pre-push**: Final lint and type checks
+Real exchanges add much more. Each of these is a good exercise:
 
-#### Conventional Commits
+- **Time-in-force**: IOC (fill what you can now, cancel the rest) and FOK (fill everything
+  now or nothing) are small changes to `submit`.
+- **Faster levels**: replace the sorted array in `book-side.ts` with a balanced tree or
+  heap, and the `findIndex` in `price-level.ts` with a linked list for O(1) cancels.
+- **Self-trade prevention**: stop a trader's buy from matching their own sell.
+- **Multiple symbols**: one `OrderBook` per instrument, routed by `/books/:symbol`.
+- **Accounts and balances**: reject orders a trader cannot pay for.
+- **Market data feed**: push trades and book updates over WebSocket.
+- **Persistence and recovery**: append every order to a log and replay it on start.
+- **Stop and iceberg orders**, order amendment, fees.
 
-All commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+## Development
 
-```bash
-# ✅ Valid commit messages
-git commit -m "feat: add user authentication"
-git commit -m "fix: resolve memory leak in data processing"
-git commit -m "docs: update API documentation"
-git commit -m "refactor: simplify error handling logic"
+| Script           | Description                                        |
+|------------------|----------------------------------------------------|
+| `bun run dev`    | Start the server with file watching                |
+| `bun run start`  | Start the server                                   |
+| `bun test`       | Run the tests                                      |
+| `bun run lint`   | Biome (warnings fail) and `tsc --noEmit`           |
+| `bun run format` | Apply Biome's fixes                                |
 
-# ❌ Invalid commit messages
-git commit -m "add feature"           # Missing type
-git commit -m "Fix bug"              # Wrong case
-git commit -m "feat!: breaking change" # Use BREAKING CHANGE footer instead
-```
+Git hooks ([Lefthook](https://github.com/evilmartians/lefthook)) lint on commit and enforce
+[Conventional Commits](https://www.conventionalcommits.org/) with
+[Cocogitto](https://github.com/cocogitto/cocogitto). `./scripts/install.sh` installs proto,
+the pinned tools, and the hooks.
 
-**Available commit types:**
+## License
 
-- `feat` - New features
-- `fix` - Bug fixes
-- `docs` - Documentation changes
-- `style` - Code style changes (formatting, etc.)
-- `refactor` - Code refactoring
-- `perf` - Performance improvements
-- `test` - Adding or updating tests
-- `build` - Build system changes
-- `ci` - CI configuration changes
-- `chore` - Other changes (maintenance, etc.)
-- `revert` - Reverting previous commits
-
-#### Managing Git Hooks
-
-```bash
-# Install hooks (automatically runs after `bun install`)
-bun run prepare
-
-# Skip hooks for a single commit (use sparingly)
-git commit -m "feat: add feature" --no-verify
-
-# Temporarily disable hooks
-lefthook uninstall
-
-# Re-enable hooks
-lefthook install
-```
-
-### 📁 Project Structure
-
-```
-├── src/
-│   └── index.ts          # Main application entry point
-├── biome.json           # Biome configuration
-├── tsconfig.json        # TypeScript configuration
-├── package.json         # Project dependencies and scripts
-└── README.md            # You are here! 📍
-```
-
-## 🔧 Configuration
-
-### TypeScript Configuration
-
-The `tsconfig.json` is configured for modern TypeScript development:
-
-- ESNext target and library
-- Strict type checking enabled
-- Bun-optimized module resolution
-- React JSX support ready
-
-### Biome Configuration
-
-The `biome.json` includes:
-
-- All recommended rules are enabled
-- Tab indentation (configurable)
-- Git integration
-- Import organization
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run the linter and formatter: `bun run format`
-5. Commit your changes (`git commit -m 'Add some amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-## 📋 Customization
-
-To customize this template for your project:
-
-1. **Update package.json** with your project details
-2. **Modify the server** in `src/index.ts` to fit your needs
-3. **Adjust TypeScript/Biome configs** as needed
-4. **Update this README** with your project-specific information
-
-## 🔒 Security
-
-Please see [SECURITY.md](SECURITY.md) for our security policy and how to report security vulnerabilities.
-
-## 📄 License
-
-This project is licensed under the Apache License—see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Bun](https://bun.sh/) for the amazing runtime
-- [Biome](https://biomejs.dev/) for fast linting and formatting
-- [TypeScript](https://www.typescriptlang.org/) for type safety
-- [Lefthook](https://github.com/evilmartians/lefthook) for fast and powerful Git hooks management
-- [Cocogitto](https://github.com/cocogitto/cocogitto) for conventional commits tooling and changelog generation
-- [Proto](https://moonrepo.dev/proto) for multi-language version management
-
----
-
-**Happy coding! 🎉** If you find this template useful, please give it a ⭐️
+Apache 2.0. See [LICENSE](LICENSE).
