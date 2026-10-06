@@ -1,18 +1,33 @@
+# Git hooks. `mise run setup` installs them.
+# Every command runs through mise because a git hook has no active mise shell,
+# and `lefthook:` makes the hook scripts find lefthook itself the same way.
+lefthook: mise x -- lefthook
+
 commit-msg:
   commands:
     cog:
-      run: cog verify --file {1}
+      run: mise x -- cog verify --file {1}
 
 pre-commit:
-  parallel: true
+  piped: true
   commands:
-    lint:
-      glob: "*.{js,ts,tsx,jsx}"
-      run: bun run lint
+    biome:
+      glob: "*.{ts,tsx,js,jsx,json,jsonc}"
+      run: mise x -- biome check --write --error-on-warnings --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+    types:
+      glob: "*.{ts,tsx}"
+      run: mise x -- bun run tsc --noEmit
+    test:
+      glob: "*.{ts,tsx}"
+      run: mise run test
+    secrets:
+      run: mise x -- gitleaks git --pre-commit --staged --no-banner
 
+# The full CI run, so a push never reaches CI untested. `git push --no-verify` skips it.
 pre-push:
   commands:
     cog:
-      run: cog check
-    lint:
-      run: bun run lint
+      run: mise x -- cog check
+    ci:
+      run: mise run ci
